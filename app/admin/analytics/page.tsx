@@ -14,16 +14,16 @@ export default async function AdminAnalyticsPage() {
   const report = generateImprovementReport(analytics);
 
   return (
-    <Section>
+    <Section className="bg-black">
       <Container>
         <Heading title="SEO Analytics Dashboard" subtitle="Visits, lead conversion, and self-improvement suggestions." />
         <div className="grid gap-6 lg:grid-cols-3">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="font-semibold text-slate-900">Top Visited Pages</h2>
-            <ul className="mt-3 space-y-2 text-sm text-slate-700">
+          <div className="rounded-2xl border border-[#2f271c] bg-[#080808] p-5">
+            <h2 className="font-serif text-xl text-white">Top Visited Pages</h2>
+            <ul className="mt-3 space-y-2 text-sm text-neutral-300">
               {report.topPages.map((item) => (
                 <li key={item.slug}>
-                  <Link href={`/${item.slug}`} className="text-brand-700 hover:underline">
+                  <Link href={`/${item.slug}`} className="text-[#c9a86a] hover:underline">
                     /{item.slug}
                   </Link>{' '}
                   ({item.visits})
@@ -33,9 +33,9 @@ export default async function AdminAnalyticsPage() {
             </ul>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="font-semibold text-slate-900">Pages Generating Leads</h2>
-            <ul className="mt-3 space-y-2 text-sm text-slate-700">
+          <div className="rounded-2xl border border-[#2f271c] bg-[#080808] p-5">
+            <h2 className="font-serif text-xl text-white">Pages Generating Leads</h2>
+            <ul className="mt-3 space-y-2 text-sm text-neutral-300">
               {report.pagesWithLeads.map((item) => (
                 <li key={item.slug}>/{item.slug} ({item.leads} leads)</li>
               ))}
@@ -43,10 +43,12 @@ export default async function AdminAnalyticsPage() {
             </ul>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="font-semibold text-slate-900">No Traffic Pages</h2>
-            <p className="mt-2 text-xs text-slate-500">{report.noTraffic.length} of {allPages.length} pages currently have no visits.</p>
-            <ul className="mt-3 max-h-52 space-y-1 overflow-y-auto text-sm text-slate-700">
+          <div className="rounded-2xl border border-[#2f271c] bg-[#080808] p-5">
+            <h2 className="font-serif text-xl text-white">No Traffic Pages</h2>
+            <p className="mt-2 text-xs text-neutral-400">
+              {report.noTraffic.length} of {allPages.length} pages currently have no visits.
+            </p>
+            <ul className="mt-3 max-h-52 space-y-1 overflow-y-auto text-sm text-neutral-300">
               {report.noTraffic.slice(0, 30).map((slug) => (
                 <li key={slug}>/{slug}</li>
               ))}
@@ -55,25 +57,25 @@ export default async function AdminAnalyticsPage() {
         </div>
 
         <div className="mt-6 grid gap-6 lg:grid-cols-2">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="font-semibold text-slate-900">Auto-Generated New Page Ideas</h2>
-            <ul className="mt-3 space-y-3 text-sm">
+          <div className="rounded-2xl border border-[#2f271c] bg-[#080808] p-5">
+            <h2 className="font-serif text-xl text-white">Auto-Generated New Page Ideas</h2>
+            <ul className="mt-3 space-y-3 text-sm text-neutral-300">
               {report.generatedSuggestions.map((item) => (
                 <li key={item.slug}>
-                  <p className="font-medium text-slate-900">/{item.slug}</p>
-                  <p className="text-slate-600">{item.reason}</p>
+                  <p className="font-medium text-white">/{item.slug}</p>
+                  <p>{item.reason}</p>
                 </li>
               ))}
             </ul>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="font-semibold text-slate-900">Weak Pages to Rewrite</h2>
-            <ul className="mt-3 space-y-3 text-sm">
+          <div className="rounded-2xl border border-[#2f271c] bg-[#080808] p-5">
+            <h2 className="font-serif text-xl text-white">Weak Pages to Rewrite</h2>
+            <ul className="mt-3 space-y-3 text-sm text-neutral-300">
               {report.weakPages.map((item) => (
                 <li key={item.slug}>
-                  <p className="font-medium text-slate-900">/{item.slug}</p>
-                  <p className="text-slate-600">{item.action}</p>
+                  <p className="font-medium text-white">/{item.slug}</p>
+                  <p>{item.action}</p>
                 </li>
               ))}
             </ul>

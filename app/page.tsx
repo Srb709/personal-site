@@ -35,13 +35,32 @@ const toCurrency = (value: number) =>
   new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
-    maximumFractionDigits: 0,
+    maximumFractionDigits: 0
   }).format(Math.max(0, value));
 
-const clampNumber = (value: string) => {
-  const parsed = Number(value);
+const parseInputNumber = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) return 0;
+  const parsed = Number(trimmed);
   if (Number.isNaN(parsed) || !Number.isFinite(parsed)) return 0;
   return parsed;
+};
+
+const sanitizeNumericInput = (raw: string, mode: 'decimal' | 'numeric') => {
+  let value = mode === 'decimal' ? raw.replace(/[^\d.]/g, '') : raw.replace(/\D/g, '');
+
+  if (mode === 'decimal') {
+    const firstDot = value.indexOf('.');
+    if (firstDot >= 0) {
+      value = value.slice(0, firstDot + 1) + value.slice(firstDot + 1).replace(/\./g, '');
+    }
+  }
+
+  if (/^0\d/.test(value)) {
+    value = value.replace(/^0+/, '');
+  }
+
+  return value;
 };
 
 const monthlyPayment = (principal: number, annualRate: number, years: number) => {
@@ -62,11 +81,11 @@ const statusLabel = (status: ProgramStatus) => {
 };
 
 export default function HomePage() {
-  const [homePrice, setHomePrice] = useState(450000);
-  const [downPaymentPercent, setDownPaymentPercent] = useState(5);
-  const [interestRate, setInterestRate] = useState(6.75);
-  const [annualIncome, setAnnualIncome] = useState(125000);
-  const [creditScore, setCreditScore] = useState(680);
+  const [homePrice, setHomePrice] = useState('450000');
+  const [downPaymentPercent, setDownPaymentPercent] = useState('5');
+  const [interestRate, setInterestRate] = useState('6.75');
+  const [annualIncome, setAnnualIncome] = useState('125000');
+  const [creditScore, setCreditScore] = useState('680');
   const [county, setCounty] = useState<County>('Philadelphia');
   const [firstTimeBuyer, setFirstTimeBuyer] = useState(true);
   const [isVeteran, setIsVeteran] = useState(false);
@@ -76,25 +95,31 @@ export default function HomePage() {
     firstName: '',
     lastName: '',
     email: '',
-    phone: '',
+    phone: ''
   });
   const [leadErrors, setLeadErrors] = useState<LeadFormErrors>({});
 
   const calculations = useMemo(() => {
+    const parsedHomePrice = parseInputNumber(homePrice);
+    const parsedDownPaymentPercent = parseInputNumber(downPaymentPercent);
+    const parsedInterestRate = parseInputNumber(interestRate);
+    const parsedAnnualIncome = parseInputNumber(annualIncome);
+    const parsedCreditScore = parseInputNumber(creditScore);
+
     const loanTermYears = 30;
-    const downPaymentAmount = (homePrice * Math.max(0, downPaymentPercent)) / 100;
-    const loanAmount = Math.max(homePrice - downPaymentAmount, 0);
+    const downPaymentAmount = (parsedHomePrice * Math.max(0, parsedDownPaymentPercent)) / 100;
+    const loanAmount = Math.max(parsedHomePrice - downPaymentAmount, 0);
 
-    const yearlyTaxes = homePrice * 0.012;
-    const yearlyInsurance = Math.max(1200, homePrice * 0.0035);
+    const yearlyTaxes = parsedHomePrice * 0.012;
+    const yearlyInsurance = Math.max(1200, parsedHomePrice * 0.0035);
 
-    const estimatedPI = monthlyPayment(loanAmount, interestRate, loanTermYears);
+    const estimatedPI = monthlyPayment(loanAmount, parsedInterestRate, loanTermYears);
     const taxesMonthly = yearlyTaxes / 12;
     const insuranceMonthly = yearlyInsurance / 12;
     const estimatedPayment = estimatedPI + taxesMonthly + insuranceMonthly;
 
     const hiddenTaxesInsuranceAssumptions = taxesMonthly * 2 + insuranceMonthly * 2;
-    const baseCashToClose = downPaymentAmount + homePrice * 0.03 + hiddenTaxesInsuranceAssumptions;
+    const baseCashToClose = downPaymentAmount + parsedHomePrice * 0.03 + hiddenTaxesInsuranceAssumptions;
 
     const kfitIncomeCap = 120000;
     const phillyIncomeCap = 110000;
@@ -106,30 +131,30 @@ export default function HomePage() {
             name: 'K-FIT',
             status: 'not_eligible',
             assistance: 0,
-            note: 'First-time buyer requirement not met.',
+            note: 'First-time buyer requirement not met.'
           }
-        : annualIncome <= kfitIncomeCap && creditScore >= 640
+        : parsedAnnualIncome <= kfitIncomeCap && parsedCreditScore >= 640
           ? {
               name: 'K-FIT',
               status: 'eligible',
               assistance: Math.min(15000, baseCashToClose * 0.4),
-              note: 'Likely eligible under current estimate.',
+              note: 'Likely eligible under current estimate.'
             }
-          : annualIncome <= kfitIncomeCap && creditScore >= 620
+          : parsedAnnualIncome <= kfitIncomeCap && parsedCreditScore >= 620
             ? {
                 name: 'K-FIT',
                 status: 'needs_review',
                 assistance: Math.min(15000, baseCashToClose * 0.4),
-                note: 'Needs lender review for score and overlays.',
+                note: 'Needs lender review for score and overlays.'
               }
             : {
                 name: 'K-FIT',
                 status: 'not_eligible',
                 assistance: 0,
                 note:
-                  annualIncome > kfitIncomeCap
+                  parsedAnnualIncome > kfitIncomeCap
                     ? 'Over typical income range.'
-                    : 'Credit score appears below common minimums.',
+                    : 'Credit score appears below common minimums.'
               };
 
     const phillyFirstHome: ProgramResult =
@@ -138,59 +163,59 @@ export default function HomePage() {
             name: 'Philly First Home',
             status: 'not_eligible',
             assistance: 0,
-            note: 'Property must be in Philadelphia.',
+            note: 'Property must be in Philadelphia.'
           }
         : !firstTimeBuyer
           ? {
               name: 'Philly First Home',
               status: 'not_eligible',
               assistance: 0,
-              note: 'First-time buyer requirement not met.',
+              note: 'First-time buyer requirement not met.'
             }
-          : annualIncome <= phillyIncomeCap && creditScore >= 660
+          : parsedAnnualIncome <= phillyIncomeCap && parsedCreditScore >= 660
             ? {
                 name: 'Philly First Home',
                 status: 'eligible',
                 assistance: 10000,
-                note: 'Likely eligible under current estimate.',
+                note: 'Likely eligible under current estimate.'
               }
-            : annualIncome <= phillyIncomeCap && creditScore >= 620
+            : parsedAnnualIncome <= phillyIncomeCap && parsedCreditScore >= 620
               ? {
                   name: 'Philly First Home',
                   status: 'needs_review',
                   assistance: 10000,
-                  note: 'Needs review for score and file-level conditions.',
+                  note: 'Needs review for score and file-level conditions.'
                 }
               : {
                   name: 'Philly First Home',
                   status: 'not_eligible',
                   assistance: 0,
                   note:
-                    annualIncome > phillyIncomeCap
+                    parsedAnnualIncome > phillyIncomeCap
                       ? 'Over typical income range.'
-                      : 'Credit score appears below common minimums.',
+                      : 'Credit score appears below common minimums.'
                 };
 
     const veteranBoost: ProgramResult =
       isVeteran
-        ? creditScore >= 620
+        ? parsedCreditScore >= 620
           ? {
               name: 'Veteran Advantage',
               status: 'eligible',
               assistance: Math.min(5000, baseCashToClose * 0.2),
-              note: 'Likely eligible based on current profile.',
+              note: 'Likely eligible based on current profile.'
             }
           : {
               name: 'Veteran Advantage',
               status: 'needs_review',
               assistance: Math.min(5000, baseCashToClose * 0.2),
-              note: 'May qualify, but score/profile needs review.',
+              note: 'May qualify, but score/profile needs review.'
             }
         : {
             name: 'Veteran Advantage',
             status: 'not_eligible',
             assistance: 0,
-            note: 'Veteran toggle not selected.',
+            note: 'Veteran toggle not selected.'
           };
 
     const programs = [kfit, phillyFirstHome, veteranBoost];
@@ -206,14 +231,10 @@ export default function HomePage() {
       .map((program) => program.name)
       .join(' + ');
 
-    const monthlyGrossIncome = annualIncome / 12;
+    const monthlyGrossIncome = parsedAnnualIncome / 12;
     const debtToIncome = monthlyGrossIncome > 0 ? estimatedPayment / monthlyGrossIncome : 1;
     const affordabilityLabel =
-      debtToIncome <= 0.36
-        ? 'Strong affordability'
-        : debtToIncome <= 0.43
-          ? 'Borderline affordability'
-          : 'Payment likely stretches budget';
+      debtToIncome <= 0.36 ? 'Strong affordability' : debtToIncome <= 0.43 ? 'Borderline affordability' : 'Payment likely stretches budget';
 
     return {
       estimatedPayment,
@@ -221,7 +242,7 @@ export default function HomePage() {
       assistanceTotal,
       programs,
       matchedProgram: matchedProgramHonest || 'No clear match based on current inputs',
-      affordabilityLabel,
+      affordabilityLabel
     };
   }, [annualIncome, county, creditScore, downPaymentPercent, firstTimeBuyer, homePrice, interestRate, isVeteran]);
 
@@ -265,7 +286,7 @@ export default function HomePage() {
   const Toggle = ({
     label,
     enabled,
-    onChange,
+    onChange
   }: {
     label: string;
     enabled: boolean;
@@ -279,30 +300,15 @@ export default function HomePage() {
       className="flex items-center justify-between rounded-md border border-[#3a3123] bg-[#0b0b0b] px-3 py-2 text-sm text-neutral-100"
     >
       <span>{label}</span>
-      <span
-        className={`relative inline-flex h-5 w-10 items-center rounded-full transition ${
-          enabled ? 'bg-[#c9a86a]' : 'bg-neutral-700'
-        }`}
-      >
-        <span
-          className={`inline-block h-4 w-4 transform rounded-full bg-black transition ${
-            enabled ? 'translate-x-5' : 'translate-x-1'
-          }`}
-        />
+      <span className={`relative inline-flex h-5 w-10 items-center rounded-full transition ${enabled ? 'bg-[#c9a86a]' : 'bg-neutral-700'}`}>
+        <span className={`inline-block h-4 w-4 transform rounded-full bg-black transition ${enabled ? 'translate-x-5' : 'translate-x-1'}`} />
       </span>
     </button>
   );
 
   return (
     <main className="min-h-screen bg-black text-neutral-100">
-      <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-6">
-        <p className="font-serif text-xl tracking-wide text-white">Steven Brooks</p>
-        <a href="tel:+12155550199" className="text-sm text-[#c9a86a] transition hover:text-[#dcc08c]">
-          (215) 555-0199
-        </a>
-      </header>
-
-      <section className="mx-auto w-full max-w-6xl px-6 pb-8">
+      <section className="mx-auto w-full max-w-6xl px-6 pb-8 pt-10">
         <div className="rounded-2xl border border-[#2f271c] bg-[#080808] p-7 lg:p-10">
           <h1 className="font-serif text-4xl leading-tight text-white md:text-5xl">
             Find Out What You Can <span className="text-[#c9a86a]">Actually Afford</span> in Pennsylvania
@@ -321,57 +327,55 @@ export default function HomePage() {
               Home Price
               <input
                 className={inputClassName}
-                type="number"
+                type="text"
                 inputMode="decimal"
                 value={homePrice}
                 onWheel={onWheelBlur}
-                onChange={(e) => setHomePrice(clampNumber(e.target.value))}
+                onChange={(e) => setHomePrice(sanitizeNumericInput(e.target.value, 'decimal'))}
               />
             </label>
             <label className="text-sm text-neutral-200">
               Down Payment %
               <input
                 className={inputClassName}
-                type="number"
+                type="text"
                 inputMode="decimal"
-                step="0.1"
                 value={downPaymentPercent}
                 onWheel={onWheelBlur}
-                onChange={(e) => setDownPaymentPercent(clampNumber(e.target.value))}
+                onChange={(e) => setDownPaymentPercent(sanitizeNumericInput(e.target.value, 'decimal'))}
               />
             </label>
             <label className="text-sm text-neutral-200">
               Interest Rate %
               <input
                 className={inputClassName}
-                type="number"
+                type="text"
                 inputMode="decimal"
-                step="0.01"
                 value={interestRate}
                 onWheel={onWheelBlur}
-                onChange={(e) => setInterestRate(clampNumber(e.target.value))}
+                onChange={(e) => setInterestRate(sanitizeNumericInput(e.target.value, 'decimal'))}
               />
             </label>
             <label className="text-sm text-neutral-200">
               Income
               <input
                 className={inputClassName}
-                type="number"
+                type="text"
                 inputMode="decimal"
                 value={annualIncome}
                 onWheel={onWheelBlur}
-                onChange={(e) => setAnnualIncome(clampNumber(e.target.value))}
+                onChange={(e) => setAnnualIncome(sanitizeNumericInput(e.target.value, 'decimal'))}
               />
             </label>
             <label className="text-sm text-neutral-200">
               Credit Score
               <input
                 className={inputClassName}
-                type="number"
+                type="text"
                 inputMode="numeric"
                 value={creditScore}
                 onWheel={onWheelBlur}
-                onChange={(e) => setCreditScore(clampNumber(e.target.value))}
+                onChange={(e) => setCreditScore(sanitizeNumericInput(e.target.value, 'numeric'))}
               />
             </label>
             <label className="text-sm text-neutral-200">
@@ -382,7 +386,7 @@ export default function HomePage() {
                 <option>Bucks</option>
               </select>
             </label>
-            <div className="sm:col-span-2 grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3 sm:col-span-2 sm:grid-cols-2">
               <Toggle label="First-time Buyer" enabled={firstTimeBuyer} onChange={setFirstTimeBuyer} />
               <Toggle label="Veteran" enabled={isVeteran} onChange={setIsVeteran} />
             </div>
@@ -391,7 +395,7 @@ export default function HomePage() {
 
         <aside
           id="deal-snapshot"
-          className="h-fit space-y-4 rounded-2xl border border-[#2f271c] bg-[#080808] p-6 lg:sticky lg:top-6"
+          className="h-fit space-y-4 rounded-2xl border border-[#2f271c] bg-[#080808] p-6 lg:sticky lg:top-28"
         >
           <h2 className="font-serif text-2xl text-white">Your Estimated Deal Snapshot</h2>
           <div className="space-y-3 text-sm text-neutral-200">
@@ -504,6 +508,7 @@ export default function HomePage() {
               <input
                 className={inputClassName}
                 type="tel"
+                placeholder="215-779-9288"
                 value={leadForm.phone}
                 onChange={(e) => updateLeadField('phone', e.target.value)}
               />
