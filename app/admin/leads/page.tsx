@@ -10,12 +10,12 @@ export default async function AdminLeadsPage() {
   const leads = await getLeads();
 
   return (
-    <Section>
+    <Section className="bg-black">
       <Container>
         <Heading title="Lead Submissions" subtitle="Hidden internal page to review inbound lead form submissions." />
-        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <table className="min-w-full text-left text-sm">
-            <thead className="bg-slate-100 text-slate-700">
+        <div className="overflow-x-auto rounded-2xl border border-[#2f271c] bg-[#080808]">
+          <table className="min-w-full text-left text-sm text-neutral-200">
+            <thead className="bg-[#0f0f0f] text-neutral-300">
               <tr>
                 <th className="px-4 py-3">Date</th>
                 <th className="px-4 py-3">Name</th>
@@ -27,7 +27,7 @@ export default async function AdminLeadsPage() {
             </thead>
             <tbody>
               {leads.map((lead) => (
-                <tr key={lead.id} className="border-t border-slate-200">
+                <tr key={lead.id} className="border-t border-[#211c15]">
                   <td className="px-4 py-3">{new Date(lead.createdAt).toLocaleString()}</td>
                   <td className="px-4 py-3">{lead.name}</td>
                   <td className="px-4 py-3">{lead.email}</td>
@@ -38,7 +38,7 @@ export default async function AdminLeadsPage() {
               ))}
               {leads.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-8 text-slate-500" colSpan={6}>
+                  <td className="px-4 py-8 text-neutral-500" colSpan={6}>
                     No leads yet.
                   </td>
                 </tr>
