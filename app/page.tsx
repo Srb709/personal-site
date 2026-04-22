@@ -38,6 +38,8 @@ const toCurrency = (value: number) =>
     maximumFractionDigits: 0
   }).format(Math.max(0, value));
 
+const toCurrencyRange = (low: number, high: number) => `${toCurrency(low)} – ${toCurrency(high)}`;
+
 const parseInputNumber = (value: string) => {
   const trimmed = value.trim();
   if (!trimmed) return 0;
@@ -74,6 +76,48 @@ const monthlyPayment = (principal: number, annualRate: number, years: number) =>
   return (principal * monthlyRate * factor) / (factor - 1);
 };
 
+const estimatedTotalMonthlyPayment = (
+  homePrice: number,
+  downPaymentPercent: number,
+  annualRate: number,
+  years: number
+) => {
+  const sanitizedHomePrice = Math.max(homePrice, 0);
+  const downPaymentAmount = (sanitizedHomePrice * Math.max(0, downPaymentPercent)) / 100;
+  const loanAmount = Math.max(sanitizedHomePrice - downPaymentAmount, 0);
+  const estimatedPI = monthlyPayment(loanAmount, annualRate, years);
+  const yearlyTaxes = sanitizedHomePrice * 0.012;
+  const yearlyInsurance = Math.max(1200, sanitizedHomePrice * 0.0035);
+
+  return estimatedPI + yearlyTaxes / 12 + yearlyInsurance / 12;
+};
+
+const estimateHomePriceFromTargetPayment = (targetMonthlyPayment: number, downPaymentPercent: number, annualRate: number) => {
+  const target = Math.max(targetMonthlyPayment, 0);
+  if (target === 0) return 0;
+
+  const loanTermYears = 30;
+  let low = 0;
+  let high = 2000000;
+
+  while (estimatedTotalMonthlyPayment(high, downPaymentPercent, annualRate, loanTermYears) < target && high < 10000000) {
+    high *= 1.5;
+  }
+
+  for (let index = 0; index < 45; index += 1) {
+    const mid = (low + high) / 2;
+    const estimate = estimatedTotalMonthlyPayment(mid, downPaymentPercent, annualRate, loanTermYears);
+
+    if (estimate > target) {
+      high = mid;
+    } else {
+      low = mid;
+    }
+  }
+
+  return Math.max(0, low);
+};
+
 const statusLabel = (status: ProgramStatus) => {
   if (status === 'eligible') return 'Likely eligible';
   if (status === 'needs_review') return 'Needs review';
@@ -98,6 +142,7 @@ export default function HomePage() {
     phone: ''
   });
   const [leadErrors, setLeadErrors] = useState<LeadFormErrors>({});
+  const [leadSubmitStatus, setLeadSubmitStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
 
   const calculations = useMemo(() => {
     const parsedHomePrice = parseInputNumber(homePrice);
@@ -118,8 +163,16 @@ export default function HomePage() {
     const insuranceMonthly = yearlyInsurance / 12;
     const estimatedPayment = estimatedPI + taxesMonthly + insuranceMonthly;
 
-    const hiddenTaxesInsuranceAssumptions = taxesMonthly * 2 + insuranceMonthly * 2;
-    const baseCashToClose = downPaymentAmount + parsedHomePrice * 0.03 + hiddenTaxesInsuranceAssumptions;
+    const countyCashFactors: Record<County, { low: number; mid: number; high: number }> = {
+      Philadelphia: { low: 0.06, mid: 0.068, high: 0.075 },
+      Montgomery: { low: 0.035, mid: 0.045, high: 0.055 },
+      Bucks: { low: 0.035, mid: 0.0425, high: 0.0525 }
+    };
+
+    const countyCashFactor = countyCashFactors[county];
+    const estimatedCashToCloseLow = Math.max(downPaymentAmount + parsedHomePrice * countyCashFactor.low, 0);
+    const estimatedCashToCloseMid = Math.max(downPaymentAmount + parsedHomePrice * countyCashFactor.mid, estimatedCashToCloseLow);
+    const estimatedCashToCloseHigh = Math.max(downPaymentAmount + parsedHomePrice * countyCashFactor.high, estimatedCashToCloseMid);
 
     const kfitIncomeCap = 120000;
     const phillyIncomeCap = 110000;
@@ -137,14 +190,14 @@ export default function HomePage() {
           ? {
               name: 'K-FIT',
               status: 'eligible',
-              assistance: Math.min(15000, baseCashToClose * 0.4),
+              assistance: Math.min(15000, estimatedCashToCloseMid * 0.4),
               note: 'Likely eligible under current estimate.'
             }
           : parsedAnnualIncome <= kfitIncomeCap && parsedCreditScore >= 620
             ? {
                 name: 'K-FIT',
                 status: 'needs_review',
-                assistance: Math.min(15000, baseCashToClose * 0.4),
+                assistance: Math.min(15000, estimatedCashToCloseMid * 0.4),
                 note: 'Needs lender review for score and overlays.'
               }
             : {
@@ -202,13 +255,13 @@ export default function HomePage() {
           ? {
               name: 'Veteran Advantage',
               status: 'eligible',
-              assistance: Math.min(5000, baseCashToClose * 0.2),
+              assistance: Math.min(5000, estimatedCashToCloseMid * 0.2),
               note: 'Likely eligible based on current profile.'
             }
           : {
               name: 'Veteran Advantage',
               status: 'needs_review',
-              assistance: Math.min(5000, baseCashToClose * 0.2),
+              assistance: Math.min(5000, estimatedCashToCloseMid * 0.2),
               note: 'May qualify, but score/profile needs review.'
             }
         : {
@@ -224,22 +277,45 @@ export default function HomePage() {
       .filter((program) => program.status === 'eligible')
       .reduce((sum, program) => sum + program.assistance, 0);
 
-    const estimatedCashToClose = Math.max(baseCashToClose - assistanceTotal, 0);
+    const estimatedCashNeededAfterAssistanceLow = Math.max(estimatedCashToCloseLow - assistanceTotal, 0);
+    const estimatedCashNeededAfterAssistanceHigh = Math.max(estimatedCashToCloseHigh - assistanceTotal, estimatedCashNeededAfterAssistanceLow);
+
+    const monthlyGrossIncome = parsedAnnualIncome / 12;
+    const priceTargetLowPayment = monthlyGrossIncome * 0.25;
+    const priceTargetHighPayment = monthlyGrossIncome * 0.33;
+    const estimatedAffordablePriceLow = estimateHomePriceFromTargetPayment(
+      Math.max(0, Math.min(priceTargetLowPayment, priceTargetHighPayment)),
+      parsedDownPaymentPercent,
+      parsedInterestRate
+    );
+    const estimatedAffordablePriceHigh = Math.max(
+      estimatedAffordablePriceLow,
+      estimateHomePriceFromTargetPayment(
+        Math.max(priceTargetLowPayment, priceTargetHighPayment),
+        parsedDownPaymentPercent,
+        parsedInterestRate
+      )
+    );
 
     const matchedProgramHonest = programs
       .filter((program) => program.status === 'eligible')
       .map((program) => program.name)
       .join(' + ');
 
-    const monthlyGrossIncome = parsedAnnualIncome / 12;
     const debtToIncome = monthlyGrossIncome > 0 ? estimatedPayment / monthlyGrossIncome : 1;
     const affordabilityLabel =
       debtToIncome <= 0.36 ? 'Strong affordability' : debtToIncome <= 0.43 ? 'Borderline affordability' : 'Payment likely stretches budget';
 
     return {
       estimatedPayment,
-      estimatedCashToClose,
+      estimatedCashToCloseLow,
+      estimatedCashToCloseMid,
+      estimatedCashToCloseHigh,
       assistanceTotal,
+      estimatedCashNeededAfterAssistanceLow,
+      estimatedCashNeededAfterAssistanceHigh,
+      estimatedAffordablePriceLow,
+      estimatedAffordablePriceHigh,
       programs,
       matchedProgram: matchedProgramHonest || 'No clear match based on current inputs',
       affordabilityLabel
@@ -275,11 +351,61 @@ export default function HomePage() {
     return Object.keys(nextErrors).length === 0;
   };
 
-  const handleLeadSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleLeadSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!validateLeadForm()) return;
 
-    setShowFullResults(true);
+    setLeadSubmitStatus('sending');
+
+    const payload = {
+      contact: {
+        firstName: leadForm.firstName.trim(),
+        lastName: leadForm.lastName.trim(),
+        email: leadForm.email.trim(),
+        phone: leadForm.phone.trim()
+      },
+      inputs: {
+        homePrice: parseInputNumber(homePrice),
+        downPaymentPercent: parseInputNumber(downPaymentPercent),
+        interestRatePercent: parseInputNumber(interestRate),
+        income: parseInputNumber(annualIncome),
+        creditScore: parseInputNumber(creditScore),
+        county,
+        firstTimeBuyer,
+        veteran: isVeteran
+      },
+      results: {
+        estimatedMonthlyPayment: calculations.estimatedPayment,
+        estimatedCashToClose: calculations.estimatedCashToCloseMid,
+        estimatedAssistanceAmount: calculations.assistanceTotal,
+        kfitStatus: `${statusLabel(calculations.programs[0].status)} • ${calculations.programs[0].note}`,
+        phillyFirstHomeStatus: `${statusLabel(calculations.programs[1].status)} • ${calculations.programs[1].note}`,
+        matchedProgram: calculations.matchedProgram,
+        affordabilityLabel: calculations.affordabilityLabel
+      }
+    };
+
+    try {
+      const response = await fetch('/api/deal-builder-lead', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        setLeadSubmitStatus('error');
+        setShowFullResults(false);
+        return;
+      }
+
+      setLeadSubmitStatus('success');
+      setShowFullResults(true);
+    } catch {
+      setLeadSubmitStatus('error');
+      setShowFullResults(false);
+      return;
+    }
+
     smoothScrollTo('deal-snapshot');
   };
 
@@ -322,6 +448,7 @@ export default function HomePage() {
       <section className="mx-auto grid w-full max-w-6xl gap-8 px-6 pb-12 lg:grid-cols-[1.1fr_0.9fr]">
         <div className="space-y-5 rounded-2xl border border-[#2f271c] bg-[#080808] p-6 lg:p-8">
           <h2 className="font-serif text-2xl text-white">Live Deal Builder</h2>
+          <p className="text-sm text-neutral-400">Start with your income and we’ll estimate what price range may realistically make sense.</p>
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="text-sm text-neutral-200">
               Home Price
@@ -333,6 +460,10 @@ export default function HomePage() {
                 onWheel={onWheelBlur}
                 onChange={(e) => setHomePrice(sanitizeNumericInput(e.target.value, 'decimal'))}
               />
+              <span className="mt-1 block text-xs text-neutral-400">
+                Based on your info, a realistic range may be around{' '}
+                {toCurrencyRange(calculations.estimatedAffordablePriceLow, calculations.estimatedAffordablePriceHigh)}.
+              </span>
             </label>
             <label className="text-sm text-neutral-200">
               Down Payment %
@@ -400,16 +531,29 @@ export default function HomePage() {
           <h2 className="font-serif text-2xl text-white">Your Estimated Deal Snapshot</h2>
           <div className="space-y-3 text-sm text-neutral-200">
             <div className="flex items-center justify-between border-b border-[#2a241b] pb-2">
+              <span>Estimated Price Range</span>
+              <strong>{toCurrencyRange(calculations.estimatedAffordablePriceLow, calculations.estimatedAffordablePriceHigh)}</strong>
+            </div>
+            <div className="flex items-center justify-between border-b border-[#2a241b] pb-2">
               <span>Estimated Monthly Payment</span>
               <strong>{toCurrency(calculations.estimatedPayment)}</strong>
             </div>
             <div className="flex items-center justify-between border-b border-[#2a241b] pb-2">
               <span>Estimated Cash to Close</span>
-              <strong>{toCurrency(calculations.estimatedCashToClose)}</strong>
+              <strong>{toCurrencyRange(calculations.estimatedCashToCloseLow, calculations.estimatedCashToCloseHigh)}</strong>
             </div>
             <div className="flex items-center justify-between border-b border-[#2a241b] pb-2">
               <span>Estimated Assistance Amount</span>
               <strong>{toCurrency(calculations.assistanceTotal)}</strong>
+            </div>
+            <div className="flex items-center justify-between border-b border-[#2a241b] pb-2">
+              <span>Estimated Cash Needed After Assistance</span>
+              <strong>
+                {toCurrencyRange(
+                  calculations.estimatedCashNeededAfterAssistanceLow,
+                  calculations.estimatedCashNeededAfterAssistanceHigh
+                )}
+              </strong>
             </div>
           </div>
 
@@ -517,12 +661,19 @@ export default function HomePage() {
             <div className="sm:col-span-2">
               <button
                 type="submit"
+                disabled={leadSubmitStatus === 'sending'}
                 className="w-full rounded-md border border-[#c9a86a] bg-[#c9a86a] px-4 py-2 text-sm font-medium text-black transition hover:bg-[#d9bc87]"
               >
-                Reveal My Full Results
+                {leadSubmitStatus === 'sending' ? 'Sending...' : 'Reveal My Full Results'}
               </button>
             </div>
           </form>
+          {leadSubmitStatus === 'success' ? (
+            <p className="mt-3 text-sm text-emerald-300">Success. Your full breakdown is now unlocked.</p>
+          ) : null}
+          {leadSubmitStatus === 'error' ? (
+            <p className="mt-3 text-sm text-red-300">We couldn’t send your details yet. Please try again.</p>
+          ) : null}
         </div>
       </section>
     </main>

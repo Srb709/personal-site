@@ -48,6 +48,16 @@ Production-ready Next.js 14 (App Router) SEO site for generating inbound buyer l
    - `http://localhost:3000/admin/leads`
    - `http://localhost:3000/admin/analytics`
 
+## Deal Builder email delivery (homepage gate)
+- Required env vars (set in `.env.local`): `EMAIL_FROM`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`.
+- Add them to a local `.env.local` file in the project root (copy from `.env.example`).
+- Run locally with email enabled:
+  ```bash
+  npm install
+  cp .env.example .env.local
+  npm run dev
+  ```
+
 ## Deployment (Vercel)
 1. Push repo to Git provider.
 2. Import project into Vercel.
